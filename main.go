@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -81,18 +82,32 @@ func getIPv6Net(v6NetPrefix netip.Addr, ownIP netip.Addr, ipv4MaskLen int, sixrd
 	myv6AddrB.Or(myv6AddrB, big.NewInt(1638))
 
 	myv6Addr := netip.AddrFrom16([16]byte(myv6AddrB.Bytes()))
-	log.Printf("usable ipv4MaskLen=%d 6rdPrefixLen=%d v6 addr: %s", ipv4MaskLen, sixrdPrefixLen, myv6Addr)
+	log.Printf("6rdPrefixLen=%d ipv4MaskLen=%d ipv4=%s resulted IPv6 address: %s", sixrdPrefixLen, ipv4MaskLen, ownIP.String(), myv6Addr)
 
 	return myv6Addr, nil
 }
 
 func main() {
-
 	log.SetFlags(log.Lshortfile)
 
-	action := os.Getenv(EnvDispatcherAction)
+	manualIP := flag.String("ip", "", "local ipv4 address")
+	manualV6 := flag.String("prefix", "", "ipv6 network and prefix separated by /")
+	manualMask := flag.Int("mask", 0, "ipv4 mask length")
+	flag.Parse()
 
-	if data := os.Getenv(EnvOption6rd); len(data) > 0 && action == "up" {
+	if *manualIP != "" && *manualV6 != "" && *manualMask > 0 {
+		v6Addr := netip.MustParsePrefix(*manualV6)
+		ip, err := getIPv6Net(v6Addr.Addr(), netip.MustParseAddr(*manualIP), *manualMask, v6Addr.Bits())
+		if err != nil {
+			log.Printf("failed to build ipv6 address: %s", err)
+			os.Exit(1)
+		}
+		log.Printf("build ipv6 address: %s", ip)
+	}
+
+	action := os.Getenv(EnvDispatcherAction)
+	data := os.Getenv(EnvOption6rd)
+	if len(data) > 0 && action == "up" {
 		log.Printf("6rd option present, handling it")
 		if err := handleEnvironment(data); err != nil {
 			log.Printf("failed to bring ipv6 up: %s", err)
